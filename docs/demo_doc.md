@@ -8,6 +8,9 @@ This project aims to demonstrate :
 while giving some assets to quantify how such or such parameter affects the
 application whole performance.
 
+## Running the tests suite
+[capture-intellij](./pics/intellij-shot-tests-suite-result.png)
+
 ## Lessons learned
 Reports generated show :
 - using docker containers is a bad idea, metrics obtained with or without containers
@@ -32,5 +35,5 @@ Running the 2 tests suites requires:
 
 ## pending jobs
 This project still requires hard work:
-+ adding more tests
++ adding more tests (having different consumers running at the same time)
 + huge code cleaning & refactoring
