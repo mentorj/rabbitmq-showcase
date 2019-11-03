@@ -35,6 +35,8 @@ public class SimpleMessagesConsumerTest {
         // uses default user/passwd/host/port
         // so not specified here
         ConnectionFactory factory = new ConnectionFactory();
+
+        factory.setHost("bilbo");
         Connection conn = null;
         try {
             conn = factory.newConnection();
@@ -59,10 +61,11 @@ public class SimpleMessagesConsumerTest {
 
     }
 
-    @Test(description = "consume messages without reusing channels  and connections",enabled = false)
+    @Test(description = "consume messages without reusing channels  and connections",enabled = true)
     public void consumeNoReuse() {
         logger.info("starting consume , without reusing channels");
         ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("bilbo");
         Connection conn = null;
         try {
 
@@ -91,10 +94,11 @@ public class SimpleMessagesConsumerTest {
         logger.info("consumer finished");
     }
 
-    @Test(description = "consume messahes with connection reuse",enabled = false)
+    @Test(description = "consume messahes with connection reuse",enabled = true)
     public void consumeWithSameConnection() {
         logger.info("starting consume , reusing the connection to RabbitMQ");
         ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("bilbo");
         Connection conn;
         try {
             conn = factory.newConnection();
@@ -111,6 +115,7 @@ public class SimpleMessagesConsumerTest {
                 );
 
                 channel.close();
+                conn.close();
             }
         }  catch (Exception e) {
             e.printStackTrace();

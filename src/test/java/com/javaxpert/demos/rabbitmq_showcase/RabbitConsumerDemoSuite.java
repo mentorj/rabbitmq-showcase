@@ -26,6 +26,7 @@ public class RabbitConsumerDemoSuite {
     @BeforeSuite
     public void declareQueueAndBinding() {
         ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("bilbo");
         Connection conn;
         try {
             conn = factory.newConnection();
@@ -60,6 +61,7 @@ public class RabbitConsumerDemoSuite {
     public void fillQueue() {
         logger.info("Filling queue before test method");
         ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("bilbo");
         Connection conn;
         try {
             conn = factory.newConnection();
@@ -83,7 +85,8 @@ public class RabbitConsumerDemoSuite {
     public void launch1ConsumerWithPrefetchEqualToZero() {
         logger.info("starting 1 consumer with Prefetch = 0");
         ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost("legolas");
+        //factory.setHost("legolas");
+        factory.setHost("bilbo");
         Connection conn = null;
         Channel channel = null;
         try {
@@ -159,7 +162,8 @@ public class RabbitConsumerDemoSuite {
     public void launch1ConsumerWithPrefetchGt0() {
         logger.info("starting 1 consumer with Prefetch >0");
         ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost("legolas");
+        //factory.setHost("legolas");
+        factory.setHost("bilbo");
         Connection conn = null;
         Channel channel = null;
         try {
@@ -228,5 +232,81 @@ public class RabbitConsumerDemoSuite {
             e.printStackTrace();
         }
     }
+
+    @Test()
+    public void launch1ConsumerWithPrefetchEqualsToHundred() {
+        logger.info("starting 1 consumer with Prefetch=100");
+        ConnectionFactory factory = new ConnectionFactory();
+        //factory.setHost("legolas");
+        factory.setHost("bilbo");
+        Connection conn = null;
+        Channel channel = null;
+        try {
+            conn = factory.newConnection();
+            channel = conn.createChannel();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (TimeoutException e) {
+            e.printStackTrace();
+        }
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        AtomicInteger counter = new AtomicInteger(0);
+        Channel finalChannel1 = channel;
+        Callable<Boolean> consumer = () ->
+        {
+            try {
+                logger.info("starting consuming");
+                finalChannel1.basicQos(10000);
+                Channel finalChannel = finalChannel1;
+                while (true) {
+                    Thread.sleep(25);
+                    finalChannel1.basicConsume(QUEUE_NAME, false,
+                            (s, delivery) -> {
+                                finalChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), true);
+                                counter.getAndAdd(1);
+                                if(counter.get()%10000==0){
+                                    logger.info("Received message = "+ new String(delivery.getBody()) +  "consumed a total of =" + counter.get());
+                                }
+                            },
+                            s -> {
+                                logger.warn("Cancel received from broker");
+                            });
+
+                }
+
+            } catch (IOException e) {
+                logger.warn("received IO exception", e);
+            }
+            return true;
+        };
+        //pool.submit(consumer);
+        Callable<Boolean> supervisor = () ->
+        {
+            AtomicBoolean finished=new AtomicBoolean(false);
+            while (!finished.get()) {
+                Thread.sleep(25);
+                if (counter.get() == MAX_MESSAGES) {
+                    logger.info("Supervisor sees all messages as consumed");
+                    finished.set(true);
+                }
+                if (counter.get() % 1000 == 0) {
+                    logger.debug("Still busy...");
+                }
+            }
+            return true;
+        };
+        //Future<Integer> supervisor_result = pool.submit(supervisor);
+        try {
+            Boolean results = pool.invokeAny(Arrays.asList(supervisor,consumer));
+            logger.info("invokation done  with result "+ results.toString());
+            channel.close();
+            conn.close();
+            logger.info("test finished");
+        } catch (InterruptedException | IOException | TimeoutException | ExecutionException e) {
+            e.printStackTrace();
+        }
+    }
+
 
 }
