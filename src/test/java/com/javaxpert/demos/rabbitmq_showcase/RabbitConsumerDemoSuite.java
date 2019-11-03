@@ -83,17 +83,15 @@ public class RabbitConsumerDemoSuite {
         }
     }
 
-    @Test(enabled=false)
-    public void launch1ConsumerWithPrefetchEqualToZero() {
-        logger.info("starting 1 consumer with Prefetch = 0");
+    @Test(description = "shows basicGet usage")
+    public void showBasicget(){
+        logger.info("starting basicGet demo");
         ConnectionFactory factory = new ConnectionFactory();
-        //factory.setHost("legolas");
         factory.setHost("bilbo");
         Connection conn = null;
         Channel channel = null;
         try {
             conn = factory.newConnection();
-
             channel = conn.createChannel();
         } catch (IOException e) {
             e.printStackTrace();
@@ -101,63 +99,32 @@ public class RabbitConsumerDemoSuite {
             e.printStackTrace();
         }
 
-        ExecutorService pool = Executors.newFixedThreadPool(2);
+        AtomicBoolean running = new AtomicBoolean(true);
         AtomicInteger counter = new AtomicInteger(0);
-        Channel finalChannel1 = channel;
-        Callable<Boolean> consumer = () ->
-        {
-            try {
+        logger.info("now starting the loop");
+        while(running.get()){
 
-                logger.info("starting consuming");
-                finalChannel1.basicQos(0);
-                Channel finalChannel = finalChannel1;
-                while (true) {
-                    Thread.sleep(25);
-                    finalChannel1.basicConsume(QUEUE_NAME, false,
-                            (s, delivery) -> {
-                                finalChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
-                                counter.getAndAdd(1);
-                                if (counter.get() % 10000 == 0) {
-                                    logger.info("Received message = " + new String(delivery.getBody()) + "consumed a total of =" + counter.get());
-                                }
-                            },
-                            s -> {
-                                logger.warn("Cancel received from broker");
-                            });
-
+            try{
+                Thread.sleep(2);
+                GetResponse response =channel.basicGet(QUEUE_NAME,true);
+                counter.getAndAdd(1);
+                if(counter.get()%10000==0){
+                    logger.info("5% done again...");
                 }
-
-            } catch (IOException e) {
-                logger.warn("received IO exception", e);
+                if(counter.get()==MAX_MESSAGES){
+                    running.set(false);
+                    logger.info("halting test finished...");
+                }
+            }catch(Exception e){
+                logger.warn("exception during test",e);
             }
-            return true;
-        };
-        //pool.submit(consumer);
-        Callable<Boolean> supervisor = () ->
-        {
-            AtomicBoolean finished = new AtomicBoolean(false);
-            while (!finished.get()) {
-                Thread.sleep(25);
-                if (counter.get() == MAX_MESSAGES) {
-                    logger.info("Supervisor sees all messages as consumed");
-                    finished.set(true);
-                }
-                if (counter.get() % 1000 == 0) {
-                    logger.debug("Still busy...");
-                }
-            }
-            return true;
-        };
-        //Future<Integer> supervisor_result = pool.submit(supervisor);
+        }
         try {
-            Boolean results = pool.invokeAny(Arrays.asList(supervisor, consumer));
-            logger.info("invokation done  with result " + results.toString());
-            channel.close();
             conn.close();
-            logger.info("test finished");
-        } catch (InterruptedException | IOException | TimeoutException | ExecutionException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
+        logger.info("test done");
     }
 
     @Test(enabled=true)

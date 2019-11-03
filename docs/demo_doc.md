@@ -21,7 +21,8 @@ intensive open/close of such objects should be avoided (impact reduced compared 
 only one
 - mixing clients using and not using fetch parameter has a big downside : faster consumers
 are downgraded to the throughput from the slowest ones because of *load balancing*
-
+- BasicGetshould be avoided in any application requiring performance (as shown by the dedicated test)
+synchronous dialog is heavyweight once network enters the game... *30 times slower than BasicConsume tests*
 ## Using the demos
 Running the 2 tests suites requires:
 + maven
