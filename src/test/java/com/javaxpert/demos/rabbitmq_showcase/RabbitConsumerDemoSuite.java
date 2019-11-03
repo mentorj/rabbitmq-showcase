@@ -4,7 +4,9 @@ import com.rabbitmq.client.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testng.Assert;
-import org.testng.annotations.*;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.BeforeSuite;
+import org.testng.annotations.Test;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -70,7 +72,7 @@ public class RabbitConsumerDemoSuite {
                 String msg = "Msg is number =" + i;
                 channel.basicPublish(EXCHANGE_NAME, ROUTING_KEY, false, false, null, msg.getBytes());
             }
-         //   channel.close();
+            //   channel.close();
             conn.close();
             logger.info("Before method is over now");
 
@@ -81,7 +83,7 @@ public class RabbitConsumerDemoSuite {
         }
     }
 
-    @Test()
+    @Test(enabled=false)
     public void launch1ConsumerWithPrefetchEqualToZero() {
         logger.info("starting 1 consumer with Prefetch = 0");
         ConnectionFactory factory = new ConnectionFactory();
@@ -115,8 +117,8 @@ public class RabbitConsumerDemoSuite {
                             (s, delivery) -> {
                                 finalChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
                                 counter.getAndAdd(1);
-                                if(counter.get()%10000==0){
-                                    logger.info("Received message = "+ new String(delivery.getBody()) +  "consumed a total of =" + counter.get());
+                                if (counter.get() % 10000 == 0) {
+                                    logger.info("Received message = " + new String(delivery.getBody()) + "consumed a total of =" + counter.get());
                                 }
                             },
                             s -> {
@@ -133,7 +135,7 @@ public class RabbitConsumerDemoSuite {
         //pool.submit(consumer);
         Callable<Boolean> supervisor = () ->
         {
-            AtomicBoolean finished=new AtomicBoolean(false);
+            AtomicBoolean finished = new AtomicBoolean(false);
             while (!finished.get()) {
                 Thread.sleep(25);
                 if (counter.get() == MAX_MESSAGES) {
@@ -148,8 +150,8 @@ public class RabbitConsumerDemoSuite {
         };
         //Future<Integer> supervisor_result = pool.submit(supervisor);
         try {
-            Boolean results = pool.invokeAny(Arrays.asList(supervisor,consumer));
-            logger.info("invokation done  with result "+ results.toString());
+            Boolean results = pool.invokeAny(Arrays.asList(supervisor, consumer));
+            logger.info("invokation done  with result " + results.toString());
             channel.close();
             conn.close();
             logger.info("test finished");
@@ -158,154 +160,138 @@ public class RabbitConsumerDemoSuite {
         }
     }
 
-    @Test()
+    @Test(enabled=true)
     public void launch1ConsumerWithPrefetchGt0() {
         logger.info("starting 1 consumer with Prefetch >0");
         ConnectionFactory factory = new ConnectionFactory();
-        //factory.setHost("legolas");
         factory.setHost("bilbo");
         Connection conn = null;
-        Channel channel = null;
+        AtomicBoolean running = new AtomicBoolean(true);
+        AtomicInteger counter = new AtomicInteger(0);
         try {
             conn = factory.newConnection();
-            channel = conn.createChannel();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (TimeoutException e) {
-            e.printStackTrace();
-        }
-
-        ExecutorService pool = Executors.newFixedThreadPool(2);
-        AtomicInteger counter = new AtomicInteger(0);
-        Channel finalChannel1 = channel;
-        Callable<Boolean> consumer = () ->
-        {
-            try {
-                logger.info("starting consuming");
-                finalChannel1.basicQos(25);
-                Channel finalChannel = finalChannel1;
-                while (true) {
-                    Thread.sleep(25);
-                    finalChannel1.basicConsume(QUEUE_NAME, false,
-                            (s, delivery) -> {
-                                finalChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), true);
-                                counter.getAndAdd(1);
-                                if(counter.get()%10000==0){
-                                    logger.info("Received message = "+ new String(delivery.getBody()) +  "consumed a total of =" + counter.get());
-                                }
-                            },
-                            s -> {
-                                logger.warn("Cancel received from broker");
-                            });
-
-                }
-
-            } catch (IOException e) {
-                logger.warn("received IO exception", e);
-            }
-            return true;
-        };
-        //pool.submit(consumer);
-        Callable<Boolean> supervisor = () ->
-        {
-            AtomicBoolean finished=new AtomicBoolean(false);
-            while (!finished.get()) {
+            Channel channel = conn.createChannel();
+            channel.basicQos(100);
+            // disable explicit ack , automatic ack is ok
+            channel.basicConsume(QUEUE_NAME, true,
+                    (s, delivery) ->
+                    {
+                        counter.getAndAdd(1);
+                        delivery.getBody();
+                        if (counter.get() % 10000 == 0) {
+                            logger.info("Got message: " + new String(delivery.getBody()) + " already consumed =" + counter.get() + " messages");
+                        }
+                        if(counter.get()==MAX_MESSAGES){
+                            logger.info("Max messages reached , stopping the loop");
+                            running.set(false);
+                        }
+                        //channel.basicAck(delivery,true);
+                    },
+                    (s, delivery) -> delivery.getReason()
+            );
+            while (running.get()) {
                 Thread.sleep(25);
-                if (counter.get() == MAX_MESSAGES) {
-                    logger.info("Supervisor sees all messages as consumed");
-                    finished.set(true);
-                }
-                if (counter.get() % 1000 == 0) {
-                    logger.debug("Still busy...");
+                if(counter.get()> (MAX_MESSAGES/2)){
+                    logger.info("Consumed more than half of the messages");
                 }
             }
-            return true;
-        };
-        //Future<Integer> supervisor_result = pool.submit(supervisor);
-        try {
-            Boolean results = pool.invokeAny(Arrays.asList(supervisor,consumer));
-            logger.info("invokation done  with result "+ results.toString());
-            channel.close();
+            logger.info("test  finished");
             conn.close();
-            logger.info("test finished");
-        } catch (InterruptedException | IOException | TimeoutException | ExecutionException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            logger.warn("Error occured during test", e);
+            Assert.fail("Error during test");
         }
+
     }
 
     @Test()
     public void launch1ConsumerWithPrefetchEqualsToHundred() {
         logger.info("starting 1 consumer with Prefetch=100");
         ConnectionFactory factory = new ConnectionFactory();
-        //factory.setHost("legolas");
         factory.setHost("bilbo");
         Connection conn = null;
-        Channel channel = null;
+        AtomicBoolean running = new AtomicBoolean(true);
+        AtomicInteger counter = new AtomicInteger(0);
         try {
             conn = factory.newConnection();
-            channel = conn.createChannel();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (TimeoutException e) {
-            e.printStackTrace();
-        }
-
-        ExecutorService pool = Executors.newFixedThreadPool(2);
-        AtomicInteger counter = new AtomicInteger(0);
-        Channel finalChannel1 = channel;
-        Callable<Boolean> consumer = () ->
-        {
-            try {
-                logger.info("starting consuming");
-                finalChannel1.basicQos(10000);
-                Channel finalChannel = finalChannel1;
-                while (true) {
-                    Thread.sleep(25);
-                    finalChannel1.basicConsume(QUEUE_NAME, false,
-                            (s, delivery) -> {
-                                finalChannel.basicAck(delivery.getEnvelope().getDeliveryTag(), true);
-                                counter.getAndAdd(1);
-                                if(counter.get()%10000==0){
-                                    logger.info("Received message = "+ new String(delivery.getBody()) +  "consumed a total of =" + counter.get());
-                                }
-                            },
-                            s -> {
-                                logger.warn("Cancel received from broker");
-                            });
-
-                }
-
-            } catch (IOException e) {
-                logger.warn("received IO exception", e);
-            }
-            return true;
-        };
-        //pool.submit(consumer);
-        Callable<Boolean> supervisor = () ->
-        {
-            AtomicBoolean finished=new AtomicBoolean(false);
-            while (!finished.get()) {
+            Channel channel = conn.createChannel();
+            channel.basicQos(25);
+            // disable explicit ack , automatic ack is ok
+            channel.basicConsume(QUEUE_NAME, false,
+                    (s, delivery) ->
+                    {
+                        counter.getAndAdd(1);
+                        delivery.getBody();
+                        if (counter.get() % 10000 == 0) {
+                            logger.info("Got message: " + new String(delivery.getBody()) + " already consumed =" + counter.get() + " messages");
+                        }
+                        if(counter.get()==MAX_MESSAGES){
+                            logger.info("Max messages reached , stopping the loop");
+                            running.set(false);
+                        }
+                        channel.basicAck(delivery.getEnvelope().getDeliveryTag(),true);
+                    },
+                    (s, delivery) -> delivery.getReason()
+            );
+            while (running.get()) {
                 Thread.sleep(25);
-                if (counter.get() == MAX_MESSAGES) {
-                    logger.info("Supervisor sees all messages as consumed");
-                    finished.set(true);
-                }
-                if (counter.get() % 1000 == 0) {
-                    logger.debug("Still busy...");
+                if(counter.get()> (MAX_MESSAGES/2)){
+                    logger.info("Consumed more than half of the messages");
                 }
             }
-            return true;
-        };
-        //Future<Integer> supervisor_result = pool.submit(supervisor);
-        try {
-            Boolean results = pool.invokeAny(Arrays.asList(supervisor,consumer));
-            logger.info("invokation done  with result "+ results.toString());
-            channel.close();
+            logger.info("test  finished");
             conn.close();
-            logger.info("test finished");
-        } catch (InterruptedException | IOException | TimeoutException | ExecutionException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            logger.warn("Error occured during test", e);
+            Assert.fail("Error during test");
         }
+
+    }
+
+    @Test(description = "consume messahes with connection reuse but  nno prefetch", enabled = true)
+    public void consumeWithSameConnection() {
+        logger.info("starting consume , reusing the connection to RabbitMQ");
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("bilbo");
+        Connection conn = null;
+        AtomicBoolean running = new AtomicBoolean(true);
+        AtomicInteger counter = new AtomicInteger(0);
+        try {
+            conn = factory.newConnection();
+            Channel channel = conn.createChannel();
+
+            // disable explicit ack , automatic ack is ok
+            channel.basicConsume(QUEUE_NAME, false,
+                    (s, delivery) ->
+                    {
+                        counter.getAndAdd(1);
+                        delivery.getBody();
+                        if (counter.get() % 10000 == 0) {
+                            logger.info("Got message: " + new String(delivery.getBody()) + " already consumed =" + counter.get() + " messages");
+                        }
+                        if(counter.get()==MAX_MESSAGES){
+                            logger.info("Max messages reached , stopping the loop");
+                            running.set(false);
+                        }
+                        channel.basicAck(delivery.getEnvelope().getDeliveryTag(),true);
+                    },
+                    (s, delivery) -> delivery.getReason()
+            );
+            while (running.get()) {
+                Thread.sleep(25);
+                if(counter.get()> (MAX_MESSAGES/2)){
+                    logger.info("Consumed more than half of the messages");
+                }
+            }
+            conn.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            logger.warn("Error occured during test", e);
+            Assert.fail("Error during test");
+        }
+        logger.info("finished consumer with connection reuse, consumed " + counter.get() + " messages");
     }
 
 
