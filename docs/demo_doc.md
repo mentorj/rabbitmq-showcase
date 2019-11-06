@@ -32,8 +32,11 @@ Running the 2 tests suites requires:
 + jdk 8 at least
 + network connection
 + 2 machines (at least 2 Vms) but not 2 containers living on the same box
++ clone the repository and update the git repository used to host the configuration
+
 
 ## pending jobs
 This project still requires hard work:
 + adding more tests (having different consumers running at the same time)
 + huge code cleaning & refactoring
++ create proper configuration and pass them to TestNg for reducing the number of test cases and improving code
